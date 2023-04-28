@@ -211,21 +211,25 @@ class EventsController extends BaseController
 
     public function getFutureEventWithWorkshops()
     {
-        return Event::select('events.*', 'workshops.id as workshop_id', 'workshops.name as workshop_name', 'workshops.start as workshop_start', 'workshops.end as workshop_end')
-            ->join('workshops', 'workshops.event_id', '=', 'events.id')
-            ->groupBy('events.id')
-            ->havingRaw('MIN(workshops.start) > NOW()')
-            ->get()
-            ->groupBy('id')
-            ->map(function ($event) {
-                $event = $event->first();
-                $event->workshops = $event->map(function ($item) {
-                    return collect($item)->only(['workshop_id', 'workshop_name', 'workshop_start', 'workshop_end']);
-                })->toArray();
-                unset($event['workshop_id'], $event['workshop_name'], $event['workshop_start'], $event['workshop_end']);
-                return $event;
+        $now = now();
+
+        $events = Event::with('workshops:id,event_id,name,start,end')
+            ->whereHas('workshops', function ($query) use ($now) {
+                $query->where('start', '>', $now);
             })
-            ->values();
+            ->select('events.*')
+            ->groupBy('events.id')
+            ->get();
+
+        foreach ($events as $event) {
+            $event->workshops = $event->workshops->map(function ($workshop) {
+                return $workshop->only(['id', 'name', 'start', 'end']);
+            })->toArray();
+            unset($event->workshops->id, $event->workshops->name, $event->workshops->start, $event->workshops->end);
+        }
+
+        return $events;
+
     }
 
 }
